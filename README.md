@@ -1,72 +1,113 @@
-# light-sdk
-or: a tool for building Tools
+# BrightNotebook Lite
 
-## tl;dr
-This repository contains the scaffolding for building simple tools for the Light Phone III. Included are a library ([:sdk:client](./sdk/client)) and placeholder application ([:tool](./tool)) that depends on it. To create a tool that is fully compatible with LightOS, you must write your application code within the `tool` module, using the primitives provided by the sdk client library.
+Notes and a calendar for the Light Phone III, built as an official Light SDK tool. Launcher
+label **Notebook Lite**, tool id `com.gios.brightnotebooklite`.
 
-You can and should use current Android best practices: Kotlin for all source code, Compose for UI, Coroutines for async programming, and MVVM architecture. **Although this is appears to be a fairly standard Android dev environment, you will quickly find out that we are (gently but broadly) restricting which Android APIs and third-party libraries can be used. This is in an effort to provide a secure and distinctly _light_ experience for our users. These restrictions are _not_ set in stone and should ease up over time. If there is a stable, open-source library that you'd like us to allow, please let us know! More on this later.**
+This is the SDK-compatible cut of [BrightNotebook](https://github.com/gi-os/BrightNotebook), a
+sideloaded app. The Light SDK restricts which Android APIs and libraries a tool may use, so this
+version keeps the core of the original (plain-text notes, a calendar with repeating entries,
+subscribed calendar feeds) and drops the parts the SDK cannot support. Each dropped feature is
+listed below with the restriction behind it.
 
-## IMPORTANT!! July 1, 2026 Update
-If you're reading this, welcome! You're early! (in a cool way)
-This repo is a work-in-progress and will remain so for a while. Things are going to change _fast_ in the coming weeks. If you're going to start building right away, be sure to `git pull` frequently.
-Before you do, though, please be aware that **while we feel good about letting everybody start to explore and build, we are still working on the infrastructure to properly deploy your new tools.**
-The currently builds of LightOS in the wild are not yet ready to "play nice" with the tools built here. If you're someone who's already comfortable working with ADB to sideload APKs on your
-Light Phone III, you can totally do that with whatever you do here! But we're shooting to make these tools feel as seamless as the ones already available in LightOS, and that's going to take a bit more work. 
-We're hoping to have an update on that front later this month. In the meantime, the best way to start working is to use an Android emulator running our new [LightOS Emulator](sdk/emulator). The instructions for getting that up and running
-are [right here](docs/system_app).
+## What it does
 
-## Quickstart
+**Notes.** A note is plain text that carries its own markers: `**bold**`, `- ` bullets,
+`1. ` numbers and `- [ ]` / `- [x]` checkboxes. Bold runs are drawn bold and the markers are
+drawn as bullets and boxes, but the stored text never changes shape, so a note reads the same
+anywhere it ends up. Tapping a box rewrites that one line, addressed by line number, so two
+identical `- [ ] milk` lines tick independently. The editor carries a list marker down when you
+press return and ends the list on an empty item; its bottom bar has a bold key and a checkbox key.
+The list is sorted by when each note was last touched.
 
-### Running your Tool
-**You can test your tool on any Android device or emulator**, but certain functionality (receiving push notifications, requesting special permissions) can only be tested with:
-A) Real Light Phone hardware running LightOS
-B) An Android emulator (on your computer) set up to run our LightOS emulator app as a _system app_ ([see advanced instructions](docs/system_app))
+**Calendar.** A month grid (tap a day to open it; the wheel or a sideways swipe steps months)
+and a day view. Typing `9:30 dentist` files the entry at half past nine; a bare leading number
+is not a time, so `3 loads of laundry` stays an all-day entry. An entry can have a start and end
+time, last several days, and repeat.
 
-You can quickly [create an emulator](https://developer.android.com/studio/run/managing-avds) that generally feels like an LPIII by using the following settings:
-* 1080 X 1240, 3.92" display
-* Android API 34
-* NO Google Play Services installed
+**Repeats.** Daily, every weekday, weekly on the entry's weekday, every other week, monthly or
+yearly, ending never or on a date. A series is one database row holding an RFC 5545 `RRULE`;
+the days it lands on are worked out for whatever is on screen by `util/Recurrence.kt`, ported
+unchanged from the original along with its tests. It reads `FREQ`, `INTERVAL`, `BYDAY`
+(including `1MO` and `-1FR`), `BYMONTHDAY`, `COUNT`, `UNTIL` and `EXDATE`, and refuses the rest
+rather than expanding it wrongly: a refused rule shows once, on its start day. Editing or deleting
+one occurrence asks **just this one** or **all of them**. "Just this one" writes an exception date
+on the series; editing first detaches that occurrence into an entry of its own.
 
-### Start Building
-1. Fork and/or clone this repository into your local dev environment.
-2. Install Android Studio and open this project within it. (IntelliJ IDEA should also work)
+**Subscribed calendars.** Calendars → SUBSCRIBE takes a published `.ics` feed or a `webcal://`
+link, either scanned as a QR code with the SDK's `LightQrCodeScanner` or typed. The feed is
+fetched immediately so a wrong address says so on the spot, then refreshed every hour by a
+`LightWork` periodic job. Each refresh replaces that calendar's rows in one transaction; a failed
+refresh keeps the last good copy and shows why it failed. The `.ics` parser handles folded lines,
+`TZID` and UTC times, all-day dates, `RRULE`, `EXDATE` and moved instances (`RECURRENCE-ID`).
+Feeds can be hidden, refreshed by hand or removed.
 
-3. Edit the code in `HomeScreen` and `HomeScreenViewModel` to get started. `Homescreen` surfaces a `@Composable` method named `Content`. This is the UI that is shown when the tool first boots. You'll notice this UI sources data from it's `viewModel` field, which is an instance of `HomeScreenViewModel`. Edit that class with your screen's logic and expose the data to the UI using either Compose `State` or Coroutine `Flow`s. If you want to create a new screen, create a new Screen/ViewModel pair: your screen should extend from `LightScreen` and your VM from `LightScreenViewModel`. Your screen implementation will need:
-   1. A direct reference to your ViewModel's class type
-   2. A factory method for creating a new instance of your ViewModel.
+**US federal holidays** are computed on the phone from the rules, with observed dates as
+separate entries (a Saturday Independence Day also puts "Independence Day (observed)" on the
+Friday). They can be switched off on the Calendars page.
 
-Look at `HomeScreen` as an example for how this is done. To navigate to your new screen, use the `navigateTo` function built into `LightScreen` - just pass it a lambda to create an instance of your new screen. Note that the `LightScreen` constructor takes in a `SealedLightActivity`. The lambda is provided an instance of this as a default parameter.
+**A day reads as a diary once it has happened and as a calendar until then.** Today is split by
+a NOW line at the current time; earlier rows are dimmed. Notes you wrote or came back to on a day
+appear on that day at the time you touched them, marked "Wrote this" or "Came back to this", and
+open the note on a tap. A day runs from 4am to 4am, so something written at 1am belongs to the
+night before (`util/JournalDay.kt`).
 
-Since LightOS does not use Android system navigation, we provide a back button for you. As long as you use `navigateTo` to move between screens, our back button should work great. If need be, you can override the `onBackPressed` method in your `LightViewModel`.
+**The wheel scrolls** the notes list, a note, a day and the Calendars page, and steps months on
+the calendar. The wheel's keycodes are read in `LightViewModel.onKeyDown`.
 
-### Submitting Your Tool
-Given our relatively limited resources and desire to keep our users safe, we're requiring that all community tools be open source (including our own!). 
-Tools are built and signed directly from a publicly available git commit, and we'll be archiving the source at build time.
-You're free to build and share privately, but LightOS won't let you install tools that are not signed by us without acknowledging privacy and performance risks.
-We won't block users from performing these "dangerous" sideloads, but we're not going to encourage it either. 
-Using the Dashboard, developers are able to queue up a build of your tool on our servers, and if it follows our guidelines and compiles cleanly, we will hand you back a signed, shareable APK.
+**Storage** is Room, opened with the SDK's own `SealedLightContext.buildDatabase`, so the
+screens and the background job share one database without reaching for an Android `Context`.
+The holiday switch lives in the SDK's DataStore.
 
-1. Review the [Tool Guidelines](TOOL_GUIDELINES.md) to get a sense of the kind of tools we're hoping to showcase.
-2. Ensure your tool is built with the latest Light SDK version and is accessible via a public Github repo.
-3. Enable developer mode on the [dashboard](https://dashboard.thelightphone.com/): Settings -> Account -> Developer Account.
-4. From there, you can create your tool: Settings -> Account -> Developer Account -> Manage Custom Tools -> Submit New Tool:
-  - The package name is unique for all tools and can't be changed later. It is pulled from the default branch of the Github repo submitted upon registering the tool.
-  - You'll then have the opportunity to add images. You can add them later on as well, but we'll require at least one for a tool to be approved.
-5. Now go in the tool detail page and press "submit build":
-  - Enter the git ref of the version of the tool to be built and a small description of the changelog.
-  - If your tool already has an active build, you won't be able to submit another.
-  - The `versionCode` of the submitted build should be higher than the one of the last version listed in the Tool page.
-6. Wait for the build to finish:
-  - In case of an error, use the "view details" button on the "Builds" section of the Tool page to check the error message. The "retry build" can be used to re-attempt building from the same git ref if necessary.
-  - If you believe the build error is due to an issue on our end (e.g. with light-sdk or our infrastructure), please feel free to open an Issue on this repo!
-  - In case of success, the "download apk" button should appear. A new "Version" entry will be created with "pending approval" status.
-7. Our team will review the builds and reach out to you via e-mail if we have any feedback regarding the approval process.
-8. If you have any questions, please e-mail us at tools@thelightphone.com
+## What was dropped, and why
 
-### Sharing Your Tool
-Once we release a version of LightOS that supports community tools, users will have an option to choose what kind of tools they want to be able to run on their device:
-- **Light-approved tools**: These include tools that are either built internally by the Light team, or built by the community and officially tested/signed-off by the Light team. We don't know _exactly_ what that sign-off process is going to look like, but as a heads-up: we're going to be looking pretty hard at whether a submitted tool matches the Light ethos both functionally and aesthetically. We've included a UX/UI library to make this as easy as possible! From a technical standpoint, these approved tools are both signed by us _and_ added to an "allow-list" within LightOS. Phones with this option selected will only install and display tools that meet both criteria.
-- **SDK-built tools**: This is a slightly more permissive choice. Phones with this option selected will install and launch any tool that was built and signed by Light. These don't require any manual approval by us (although we can block them in extreme cases). If a user wants to be able to install a tool that was shared locally or somewhere outside of Light's dashboard, but they still want to be confident that it will run well and integrate nicely with LightOS, they might choose this option.
-- **Any tools**: A user will have the option to make any APK launchable from LightOS, but they will own the responsibility of getting them installed/uninstalled. When a user selects this option, we will warn them that they are potentially opening their device up to security risks, and that doing so will limit our ability to support them if something goes wrong.
+| Feature in BrightNotebook | Why it is not here |
+| --- | --- |
+| Photographing a page and having Claude transcribe it or extract events | Needs CameraX for a real capture. The SDK allowlist has no CameraX; the only camera access is `LightQrCodeScanner`. |
+| Mirroring entries into the phone's calendar provider, importing from it, photos on the day, call log | All of these go through `contentResolver`, which the SDK blocks. |
+| Exact-time reminders | Need `AlarmManager` (`android.app.*`, blocked) and a notification, and the SDK exposes no notification API to tools. |
+| `lightnotebook://` links from other apps, and opening Roll for capture | Need `Intent` and `startActivity`, both blocked. |
+| BrightPasses, Roll, BrightChat, BrightLedger and BrightRemote bridges | Each reads another app's data through an intent or content provider. |
+| Shake to report a glitch | Needs `SensorManager` from `getSystemService`, which is blocked. |
+| Weather, daylight, steps, screen time, places, backup files | Out of scope for a lite cut. Weather would be possible over the network, but it was left out to keep the tool small. |
+| A pinch-zoom wall planner | Replaced by a plain month grid and day view. |
+| A time zone override | Times use the phone's zone, which is shown on the Calendars page. |
 
-## [Complete Documentation](./docs)
+## Build
+
+You need JDK 17 and the Android SDK (platform 36).
+
+```sh
+./gradlew -DlightSdk.toolOnly=true :tool:assembleDebug
+./gradlew -DlightSdk.toolOnly=true :tool:testDebugUnitTest :tool:lintDebug
+```
+
+All parsing and date logic sits in `tool/src/main/kotlin/com/gios/brightnotebooklite/util/`,
+free of Android imports, with tests in `tool/src/test/`. CI (`.github/workflows/build-tool.yml`)
+runs the tests, lint and the debug build on every push with the same flags as Light's tool builder.
+It publishes nothing.
+
+To install on a phone or emulator running the Light SDK server, see `./gradlew :tool:uploadTool`
+in `tool/build.gradle.kts`.
+
+## Permissions
+
+- `INTERNET`, to fetch subscribed calendar feeds.
+- `CAMERA`, for scanning a feed address as a QR code. It is asked for the first time the scanner
+  opens, not at launch.
+
+## Tool Library submission notes
+
+- The tool id, label and version live in `tool/lighttool.toml`. Bump `versionCode` for every
+  submission.
+- Everything is in the `tool` module. `sdk/`, `plugin/` and `lint-rules/` are upstream and
+  unmodified, so this repository can be rebased onto
+  [lightphone/light-sdk](https://github.com/lightphone/light-sdk).
+- Only allowlisted dependencies are used: Room (with its KSP compiler), DataStore, ktor with the
+  OkHttp engine, WorkManager through `LightWork`, and Compose.
+- No reflection, no blocked imports, no custom manifest.
+
+## Credits
+
+Built on [lightphone/light-sdk](https://github.com/lightphone/light-sdk) (MIT); see `LICENSE`.
+The notes, recurrence, `.ics` and holiday logic are ported from
+[gi-os/BrightNotebook](https://github.com/gi-os/BrightNotebook) (MIT).
