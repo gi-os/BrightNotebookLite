@@ -103,7 +103,7 @@ object DayPlan {
                     kind = Kind.ENTRY,
                     refId = e.id,
                     title = e.text,
-                    sortMinutes = if (timed) JournalDay.fromClockMinutes(e.startMinutes!!) else null,
+                    sortMinutes = if (timed) JournalDay.fromClockMinutes(e.startMinutes) else null,
                     clockMinutes = if (timed) e.startMinutes else null,
                     endClockMinutes = if (timed) e.endMinutes else null,
                     occurrenceStart = start,

@@ -53,14 +53,14 @@ class TextEditScreen(
                 leftBottomBarItem = if (noteTools) {
                     LightBarButton.Text(text = "B", contentDescription = "Bold") {
                         val sel = state.selection
-                        apply(state, NoteMarkdown.toggleBold(state.text.toString(), sel.min, sel.max))
+                        applyEdit(state, NoteMarkdown.toggleBold(state.text.toString(), sel.min, sel.max))
                     }
                 } else {
                     null
                 },
                 rightBottomBarItem = if (noteTools) {
                     LightBarButton.Text(text = "[ ]", contentDescription = "Checkbox") {
-                        apply(state, NoteLines.toggleCheckbox(state.text.toString(), state.selection.min))
+                        applyEdit(state, NoteLines.toggleCheckbox(state.text.toString(), state.selection.min))
                     }
                 } else {
                     null
@@ -70,7 +70,7 @@ class TextEditScreen(
     }
 }
 
-private fun apply(state: TextFieldState, edit: Edit) {
+private fun applyEdit(state: TextFieldState, edit: Edit) {
     state.edit {
         replace(0, length, edit.text)
         selection = TextRange(edit.selStart.coerceIn(0, edit.text.length), edit.selEnd.coerceIn(0, edit.text.length))
@@ -93,7 +93,7 @@ private fun ListContinuation(state: TextFieldState) {
             val edit = continueChecklist(text, sel.start) ?: NoteMarkdown.continueList(text, sel.start)
             if (edit != null) {
                 previous = edit.text
-                apply(state, edit)
+                applyEdit(state, edit)
             }
         }
     }
