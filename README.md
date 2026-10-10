@@ -1,5 +1,7 @@
 # BrightNotebook Lite
 
+> **This is the Lite version.** BrightNotebook Lite is built only with Light's official SDK, so it can go in the Light Tool Library. It does less than the full app. For the full app, get [BrightNotebook](https://github.com/gi-os/BrightNotebook) ([on BrightMarket](https://brightmarket.gzl.dev/app/com.gios.lightnotebook/)).
+
 Notes and a calendar for the Light Phone III, built as an official Light SDK tool. Launcher
 label **Notebook Lite**, tool id `com.gios.brightnotebooklite`.
 
