@@ -1,8 +1,8 @@
 [tool]
 id = "com.gios.brightnotebooklite"
-label = "BrightNotebook Lite"
-versionCode = 1
-versionName = "0.1.0"
+label = "Notebook"
+versionCode = 2
+versionName = "0.1.1"
 permissions = ["android.permission.INTERNET", "android.permission.CAMERA"]
 capabilities = []
 orientation = "portrait"
