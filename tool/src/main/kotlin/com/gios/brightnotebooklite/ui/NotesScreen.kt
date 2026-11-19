@@ -14,7 +14,6 @@ import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.ui.LightBarButton
-import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightTopBarCenter
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -68,13 +67,11 @@ class NotesScreen(sealedActivity: SealedLightActivity) :
         val notes by viewModel.notes.collectAsState()
         Page(
             center = LightTopBarCenter.Text("Notebook"),
-            left = LightBarButton.LightIcon(
-                icon = LightIcons.SETTINGS,
-                onClick = { navigateTo(::CalendarsScreen) },
-                contentDescription = "Calendars",
-            ),
             right = LightBarButton.Text(text = "CALENDAR", onClick = { navigateTo({ CalendarScreen(it) }) }),
-            bottom = listOf(LightBarButton.Text(text = "NEW NOTE", onClick = ::newNote)),
+            bottom = listOf(
+                LightBarButton.Text(text = "NEW NOTE", onClick = ::newNote),
+                LightBarButton.Text(text = "SETTINGS", onClick = { navigateTo(::CalendarsScreen) }),
+            ),
             wheel = viewModel.wheel,
         ) {
             val list = notes

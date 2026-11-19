@@ -136,7 +136,15 @@ class EntryScreen(
 
     private fun editText() {
         val entry = current() ?: return
-        navigateTo({ TextEditScreen(it, title = "Edit", initial = entry.text, singleLine = true) }) { typed ->
+        navigateTo({
+            TextEditScreen(
+                it,
+                title = "Edit",
+                initial = entry.text,
+                singleLine = true,
+                validate = { typed -> if (typed.isBlank()) "Add a title." else null },
+            )
+        }) { typed ->
             val (minutes, text) = NoteDates.splitLeadingTime(typed)
             if (text.isBlank()) return@navigateTo
             withScope { e -> e.copy(text = text.trim(), startMinutes = minutes ?: e.startMinutes, endMinutes = if (minutes != null) null else e.endMinutes) }
@@ -146,7 +154,22 @@ class EntryScreen(
     private fun editTime() {
         val entry = current() ?: return
         val shown = listOfNotNull(NoteDates.clock(entry.startMinutes), NoteDates.clock(entry.endMinutes)).joinToString(" - ")
-        navigateTo({ TextEditScreen(it, title = "Time (empty for all day)", initial = shown, singleLine = true) }) { typed ->
+        navigateTo({
+            TextEditScreen(
+                it,
+                title = "Time (empty for all day)",
+                initial = shown,
+                singleLine = true,
+                validate = { typed ->
+                    val first = typed.split("-", "–", " to ").map { p -> p.trim() }.firstOrNull { p -> p.isNotEmpty() }
+                    if (first != null && NoteDates.parseClock(first) == null) {
+                        "Could not read that time. Try 9:30 or 9:30 - 10:30."
+                    } else {
+                        null
+                    }
+                },
+            )
+        }) { typed ->
             val parts = typed.split("-", "–", " to ").map { it.trim() }.filter { it.isNotEmpty() }
             val start = parts.getOrNull(0)?.let { NoteDates.parseClock(it) }
             val end = parts.getOrNull(1)?.let { NoteDates.parseClock(it) }?.takeIf { start != null && it > start }

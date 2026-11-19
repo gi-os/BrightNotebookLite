@@ -41,14 +41,20 @@ object FeedSync {
         val response = try {
             client.get(url) { header("Accept", "text/calendar, text/plain;q=0.9, */*;q=0.5") }
         } catch (e: Exception) {
-            throw FeedException("Could not reach ${CalendarUrl.labelFor(url)}")
+            throw FeedException("Could not connect. Check the address and try again.")
         }
         if (!response.status.isSuccess()) {
-            throw FeedException("The server answered ${response.status.value}")
+            throw FeedException(
+                if (response.status.value == 404 || response.status.value == 410) {
+                    "Calendar not found. Check the address."
+                } else {
+                    "Could not connect. Check the address and try again."
+                },
+            )
         }
         val text = response.bodyAsText()
         if (!IcsParser.looksLikeIcs(text)) {
-            throw FeedException("That address did not return a calendar")
+            throw FeedException("That address is not a calendar. Check the address.")
         }
         text
     }
@@ -58,7 +64,7 @@ object FeedSync {
      * refused before any network call.
      */
     suspend fun subscribe(dao: NotebookDao, raw: String): Result<CalendarEntity> = runCatching {
-        val url = CalendarUrl.feedIn(raw) ?: throw FeedException("That is not a calendar address")
+        val url = CalendarUrl.feedIn(raw) ?: throw FeedException("That is not a calendar address. It should start with https:// or webcal://")
         val text = fetch(url)
         val now = System.currentTimeMillis()
         val existing = dao.calendarByUrl(url)
