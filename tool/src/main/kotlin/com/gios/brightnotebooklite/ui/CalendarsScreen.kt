@@ -51,12 +51,17 @@ class CalendarsViewModel(
     /** True while a feed is being fetched, so the page can say so. */
     val busy = MutableStateFlow(false)
 
+    /** The address that failed to subscribe, so the editor can reopen with it typed in. */
+    val retryAddress = MutableStateFlow<String?>(null)
+
     fun toggleHolidays() {
         viewModelScope.launch { Settings.setShowHolidays(store, !showHolidays.value) }
     }
 
     fun subscribe(raw: String) {
+        retryAddress.value = null
         if (CalendarUrl.feedIn(raw) == null) {
+            retryAddress.value = raw
             message.value = "That is not a calendar address. It should start with https:// or webcal://"
             return
         }
@@ -66,19 +71,23 @@ class CalendarsViewModel(
             busy.value = false
             message.value = result.fold(
                 onSuccess = { "Added ${it.label}: ${it.eventCount} events. It refreshes every hour." },
-                onFailure = { it.message ?: "That calendar could not be added." },
+                onFailure = {
+                    retryAddress.value = raw
+                    it.message ?: "Could not connect. Check the address and try again."
+                },
             )
         }
     }
 
     fun refresh(calendar: CalendarEntity) {
+        retryAddress.value = null
         busy.value = true
         viewModelScope.launch {
             val result = FeedSync.refresh(dao, calendar)
             busy.value = false
             message.value = result.fold(
                 onSuccess = { "${it.label} is up to date: ${it.eventCount} events." },
-                onFailure = { "${calendar.label}: ${it.message ?: "refresh failed"}. The last copy is kept." },
+                onFailure = { "Could not refresh ${calendar.label}. ${it.message ?: "Try again."} The last copy is kept." },
             )
         }
     }
@@ -111,10 +120,14 @@ class CalendarsScreen(sealedActivity: SealedLightActivity) :
             if (pick == 0) {
                 navigateTo(::FeedScanScreen) { scanned -> viewModel.subscribe(scanned) }
             } else {
-                navigateTo({ TextEditScreen(it, title = "Calendar address", initial = "https://", singleLine = true, submitLabel = "ADD") }) { typed ->
-                    viewModel.subscribe(typed.trim())
-                }
+                typeAddress("https://")
             }
+        }
+    }
+
+    private fun typeAddress(initial: String) {
+        navigateTo({ TextEditScreen(it, title = "Calendar address", initial = initial, singleLine = true, submitLabel = "ADD") }) { typed ->
+            viewModel.subscribe(typed.trim())
         }
     }
 
@@ -141,13 +154,23 @@ class CalendarsScreen(sealedActivity: SealedLightActivity) :
         val shown = message
         if (shown != null) {
             Themed {
-                LightFullscreenModal(message = shown, onClose = { viewModel.message.value = null })
+                LightFullscreenModal(
+                    message = shown,
+                    onClose = {
+                        viewModel.message.value = null
+                        val retry = viewModel.retryAddress.value
+                        if (retry != null) {
+                            viewModel.retryAddress.value = null
+                            typeAddress(retry)
+                        }
+                    },
+                )
             }
             return
         }
 
         Page(
-            center = LightTopBarCenter.Text("Calendars"),
+            center = LightTopBarCenter.Text("Settings"),
             left = backButton { goBack(null) },
             bottom = listOf(LightBarButton.Text(text = if (busy) "FETCHING…" else "SUBSCRIBE", onClick = { if (!busy) add() })),
             wheel = viewModel.wheel,
@@ -155,7 +178,7 @@ class CalendarsScreen(sealedActivity: SealedLightActivity) :
             SectionLabel("Holidays")
             ListRow(
                 title = "US federal holidays",
-                detail = if (holidays) "Shown. Worked out on the phone, no network." else "Hidden",
+                detail = if (holidays) "On. Tap to turn off." else "Off. Tap to turn on.",
                 onClick = viewModel::toggleHolidays,
             )
 

@@ -3,9 +3,11 @@ package com.gios.brightnotebooklite.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.text.input.TextFieldState
-import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextRange
@@ -16,11 +18,21 @@ import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.SimpleLightScreen
 import com.thelightphone.sdk.rememberKeyboardOptions
 import com.thelightphone.sdk.ui.LightBarButton
+import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextInputEditor
+import com.thelightphone.sdk.ui.LightTextVariant
 import com.thelightphone.sdk.ui.LightThemeTokens
+import com.thelightphone.sdk.ui.LightTopBarCenter
 
 /**
- * Full-screen typing with the LP3 keyboard. Returns the text on SAVE; going back returns nothing.
+ * Full-screen typing with the LP3 keyboard. Returns the text on SAVE; going back returns nothing,
+ * and the on-screen back arrow asks first when the text was changed.
+ *
+ * The system back pops the screen without asking it, and tools may not intercept it. Text left
+ * that way is kept as a draft and comes back the next time the same editor opens.
+ *
+ * [validate] runs on SAVE. A message it returns is shown and the editor stays open with the text
+ * as typed.
  *
  * With [noteTools] on, the editor behaves like a note: a new line after a list item carries the
  * marker down (and an empty item ends the list), and the bottom bar has bold and checkbox keys.
@@ -32,19 +44,67 @@ class TextEditScreen(
     private val singleLine: Boolean = false,
     private val noteTools: Boolean = false,
     private val submitLabel: String = "SAVE",
+    private val validate: ((String) -> String?)? = null,
 ) : SimpleLightScreen<String>(sealedActivity) {
+
+    private val draftKey = "$title\u0000$initial"
+    private val startText = drafts[draftKey] ?: initial
+
+    // Kept here, not remembered, so the text survives the discard and error pages below and can
+    // be saved as a draft.
+    private val state = TextFieldState(startText, TextRange(startText.length))
+    private var discarding by mutableStateOf(false)
+    private var problem by mutableStateOf<String?>(null)
+    private var finished = false
+
+    private fun changed(): Boolean = state.text.toString() != initial
+
+    private fun finish(result: String?) {
+        finished = true
+        goBack(result)
+    }
+
+    private fun back() {
+        if (changed()) discarding = true else finish(null)
+    }
+
+    override fun onScreenDestroy() {
+        if (!finished && changed()) drafts[draftKey] = state.text.toString() else drafts.remove(draftKey)
+    }
 
     @Composable
     override fun Content() {
         val keyboardOptions = rememberKeyboardOptions()
-        val state = rememberTextFieldState(initial, TextRange(initial.length))
         if (noteTools) ListContinuation(state)
+        if (discarding) {
+            DiscardPage(
+                title = "Discard changes?",
+                onDiscard = { finish(null) },
+                onKeep = { discarding = false },
+            )
+            return
+        }
+        val message = problem
+        if (message != null) {
+            Page(
+                center = LightTopBarCenter.Text(title),
+                left = backButton { problem = null },
+                bottom = listOf(LightBarButton.Text(text = "TRY AGAIN", onClick = { problem = null })),
+            ) {
+                LightText(text = message, variant = LightTextVariant.Copy)
+            }
+            return
+        }
         Themed {
             LightTextInputEditor(
                 title = title,
                 state = state,
-                onSubmit = { goBack(it.toString()) },
-                onBack = { goBack(null) },
+                onSubmit = {
+                    val text = it.toString()
+                    val issue = validate?.invoke(text)
+                    if (issue != null) problem = issue else finish(text)
+                },
+                onBack = ::back,
                 keyboardOptionsFlow = keyboardOptions,
                 modifier = Modifier.background(LightThemeTokens.colors.background),
                 submitLabel = submitLabel,
@@ -67,6 +127,23 @@ class TextEditScreen(
                 },
             )
         }
+    }
+
+    private companion object {
+        /** Unsaved text left by the system back, by editor. Lives as long as the tool's process. */
+        val drafts = mutableMapOf<String, String>()
+    }
+}
+
+/** Asks whether to throw away typed text. Back keeps editing. */
+@Composable
+fun DiscardPage(title: String, onDiscard: () -> Unit, onKeep: () -> Unit) {
+    Page(
+        center = LightTopBarCenter.Text(title),
+        left = backButton(onKeep),
+    ) {
+        ListRow(title = "Discard", onClick = onDiscard)
+        ListRow(title = "Keep editing", onClick = onKeep)
     }
 }
 
